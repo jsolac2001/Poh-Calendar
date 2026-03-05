@@ -4,6 +4,12 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <meta name="theme-color" content="#667eea"/>
+<!-- PWA: makes the app fullscreen (no address bar) when added to home screen -->
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Family Calendar"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<link rel="manifest" href="manifest.json"/>
 <title>🏠 Family Calendar</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -19,6 +25,7 @@
     font-weight:700;cursor:pointer;transition:all 0.2s}
   .btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:white}
   .btn-secondary{background:white;border:2px solid #e2e8f0;color:#718096}
+  .btn-danger{background:#FEE2E2;color:#DC2626;border:2px solid #FECACA}
   .btn:disabled{background:#e2e8f0;color:#aaa;cursor:default}
   .toggle-wrap{display:flex;align-items:center;justify-content:space-between;
     border-radius:14px;padding:14px 16px;margin-bottom:12px}
@@ -28,10 +35,8 @@
     position:absolute;top:3px;transition:left 0.2s;box-shadow:0 1px 4px rgba(0,0,0,0.2)}
   .chip{font-size:12px;padding:2px 8px;border-radius:8px;font-weight:600;
     display:inline-flex;align-items:center;gap:4px}
-  /* Fixed height cells — content never pushes rows apart */
   .day-cell{height:82px;border-radius:12px;padding:6px;cursor:pointer;
-    border:2px solid #f0f0f0;background:#f9fafb;transition:all 0.15s;
-    overflow:hidden;position:relative}
+    border:2px solid #f0f0f0;background:#f9fafb;transition:all 0.15s;overflow:hidden}
   .day-cell:hover{background:#EEF2FF;border-color:#667eea;transform:scale(1.02)}
   .day-cell.today{background:linear-gradient(135deg,#667eea,#764ba2);border:none}
   .plan-pill{font-size:9px;padding:2px 5px;border-radius:5px;margin-bottom:2px;
@@ -45,11 +50,12 @@
   .label{display:block;font-weight:700;font-size:12px;color:#718096;
     text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px}
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
-  .date-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
-  .date-row input[type=date],.date-row input[type=time]{
-    padding:8px 10px;border-radius:10px;font-size:13px;border:2px solid #e2e8f0;
-    outline:none;background:#f9fafb;color:#2d3748;font-weight:500;flex:1;min-width:120px}
-  .section-box{border-radius:14px;padding:14px;margin-bottom:12px;border:2px solid}
+  .confirm-bar{background:#FEF2F2;border:2px solid #FECACA;border-radius:12px;
+    padding:10px 14px;display:flex;align-items:center;justify-content:space-between;
+    gap:8px;margin-top:8px}
+  #install-banner{display:none;background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.25);
+    border-radius:16px;padding:12px 16px;margin-bottom:14px;
+    display:flex;align-items:center;justify-content:space-between;gap:10px}
   #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);
     background:#2d3748;color:white;padding:12px 24px;border-radius:20px;
     font-weight:600;font-size:14px;transition:transform 0.3s;z-index:999;pointer-events:none}
@@ -60,7 +66,6 @@
 </style>
 </head>
 <body>
-
 <div id="loading">🏠 Loading Family Calendar...</div>
 <div id="toast"></div>
 <div id="app"></div>
@@ -69,8 +74,8 @@
 // ════════════════════════════════════════════════
 //  ⚡ REPLACE THESE VALUES WITH YOUR SUPABASE KEYS
 // ════════════════════════════════════════════════
-const SUPABASE_URL = 'https://nfycxkkywwofamxrgicg.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5meWN4a2t5d3dvZmFteHJnaWNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzMzM4ODMsImV4cCI6MjA4NzkwOTg4M30.0tnhSEYFG1e7UI5DfOoFUiR31vKYJXpTGCfuwtS7gsM';
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
 // ════════════════════════════════════════════════
 
 const { createClient } = supabase;
@@ -87,8 +92,8 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const genId = () => Math.random().toString(36).slice(2,10);
 const dateStr = (y,m,d) => `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-const fmtDate = s => { const [y,m,d]=s.split('-'); return `${d}/${m}/${y}`; };
-const fmtTime = t => { if(!t) return ''; const [h,mi]=t.split(':'); const ampm=+h>=12?'pm':'am'; return `${+h%12||12}:${mi}${ampm}`; };
+const fmtDate = s => { if(!s) return ''; const [y,m,d]=s.split('-'); return `${d}/${m}/${y}`; };
+const fmtTime = t => { if(!t) return ''; const [h,mi]=t.split(':'); return `${+h%12||12}:${mi}${+h>=12?'pm':'am'}`; };
 
 let state = {
   members:[], plans:[], currentYear:new Date().getFullYear(),
@@ -99,18 +104,20 @@ let realtimeChannel = null;
 
 // ── Supabase helpers ───────────────────────────
 async function loadMembers() {
-  const { data } = await db.from('members').select('*');
+  const {data} = await db.from('members').select('*');
   return (data||[]).map(r=>({id:r.id,name:r.name,emoji:r.emoji,colorIndex:r.color_index}));
 }
 async function saveMembers(members) {
   await db.from('members').delete().neq('id','___');
-  if (members.length) await db.from('members').insert(members.map(m=>({id:m.id,name:m.name,emoji:m.emoji,color_index:m.colorIndex})));
+  if(members.length) await db.from('members').insert(members.map(m=>({id:m.id,name:m.name,emoji:m.emoji,color_index:m.colorIndex})));
 }
 async function loadPlans() {
-  const { data } = await db.from('plans').select('*');
+  const {data} = await db.from('plans').select('*');
   return (data||[]).map(r=>({
-    id:r.id, startDate:r.start_date, endDate:r.end_date,
-    startTime:r.start_time, endTime:r.end_time,
+    id:r.id,
+    startDate: r.start_date || r.date || '',
+    endDate: r.end_date || r.date || '',
+    startTime:r.start_time||null, endTime:r.end_time||null,
     memberId:r.member_id, title:r.title,
     hasDinner:r.has_dinner, dinnerTime:r.dinner_time,
     isFamily:r.is_family, taggedMembers:r.tagged_members||[]
@@ -125,46 +132,54 @@ async function addPlan(plan) {
     is_family:plan.isFamily, tagged_members:plan.taggedMembers
   });
 }
+async function updatePlan(plan) {
+  await db.from('plans').update({
+    start_date:plan.startDate, end_date:plan.endDate,
+    start_time:plan.startTime||null, end_time:plan.endTime||null,
+    member_id:plan.memberId, title:plan.title,
+    has_dinner:plan.hasDinner, dinner_time:plan.dinnerTime,
+    is_family:plan.isFamily, tagged_members:plan.taggedMembers
+  }).eq('id', plan.id);
+}
 async function deletePlan(id) { await db.from('plans').delete().eq('id',id); }
 
 function subscribeToPlans() {
-  if (realtimeChannel) db.removeChannel(realtimeChannel);
+  if(realtimeChannel) db.removeChannel(realtimeChannel);
   realtimeChannel = db.channel('plans-changes')
-    .on('postgres_changes',{event:'*',schema:'public',table:'plans'}, async () => {
+    .on('postgres_changes',{event:'*',schema:'public',table:'plans'}, async ()=>{
       state.plans = await loadPlans();
-      if (state.screen==='calendar' && !state.modal) render();
+      if(state.screen==='calendar' && !state.modal) render();
     }).subscribe();
 }
 
-// ── Helpers ────────────────────────────────────
 function plansForDay(ds) {
-  return state.plans.filter(p => p.startDate <= ds && ds <= p.endDate);
+  return state.plans.filter(p => (p.startDate||'') <= ds && ds <= (p.endDate||p.startDate||''));
 }
 
 function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'), 2500);
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
 }
 
+// ── Render ─────────────────────────────────────
 function render() {
-  const app = document.getElementById('app');
-  if (state.screen==='loading') return;
-  if (state.screen==='setup') { app.innerHTML=renderSetup(); bindSetup(); return; }
-  app.innerHTML = renderCalendar();
-  if (state.modal) renderModal();
+  const app=document.getElementById('app');
+  if(state.screen==='loading') return;
+  if(state.screen==='setup'){app.innerHTML=renderSetup();bindSetup();return;}
+  app.innerHTML=renderCalendar();
+  if(state.modal) renderModal();
   bindCalendar();
 }
 
 // ── Setup ──────────────────────────────────────
-let setupMembers = [];
+let setupMembers=[];
 function renderSetup() {
-  if (!setupMembers.length) {
-    setupMembers = state.members.length
-      ? JSON.parse(JSON.stringify(state.members))
-      : [{id:genId(),name:'',emoji:'🧑',colorIndex:0},{id:genId(),name:'',emoji:'👩',colorIndex:1}];
+  if(!setupMembers.length) {
+    setupMembers=state.members.length?JSON.parse(JSON.stringify(state.members))
+      :[{id:genId(),name:'',emoji:'🧑',colorIndex:0},{id:genId(),name:'',emoji:'👩',colorIndex:1}];
   }
-  const rows = setupMembers.map((m,i)=>{
+  const rows=setupMembers.map((m,i)=>{
     const col=COLORS[m.colorIndex];
     return `<div style="background:${col.light};border:2px solid ${col.border};border-radius:16px;padding:16px;margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:12px">
@@ -172,18 +187,17 @@ function renderSetup() {
           ${EMOJIS.map(e=>`<option value="${e}" ${e===m.emoji?'selected':''}>${e}</option>`).join('')}
         </select>
         <input class="name-inp" data-idx="${i}" placeholder="Member ${i+1} name" value="${m.name}"
-          style="flex:1;padding:10px 14px;border-radius:10px;font-size:15px;font-weight:600;
-          border:2px solid ${col.border};outline:none;color:#2d3748"/>
+          style="flex:1;padding:10px 14px;border-radius:10px;font-size:15px;font-weight:600;border:2px solid ${col.border};outline:none;color:#2d3748"/>
         <div style="width:22px;height:22px;border-radius:50%;background:${col.bg}"></div>
         ${setupMembers.length>1?`<button class="remove-btn" data-idx="${i}" style="background:none;border:none;font-size:18px;cursor:pointer;color:#ccc">✕</button>`:''}
       </div>
     </div>`;
   }).join('');
-  const valid = setupMembers.every(m=>m.name.trim());
+  const valid=setupMembers.every(m=>m.name.trim());
   return `<div class="overlay"><div class="modal">
     <h2 style="font-size:26px;font-weight:800;color:#2d3748;margin-bottom:6px">🏠 Set Up Your Family</h2>
     <p style="color:#718096;font-size:14px;margin-bottom:24px">Add up to 4 family members</p>
-    <div id="member-rows">${rows}</div>
+    ${rows}
     ${setupMembers.length<4?`<button id="add-member-btn" style="width:100%;padding:12px;border:2px dashed #cbd5e0;border-radius:16px;background:none;color:#718096;font-size:15px;cursor:pointer;font-weight:600;margin-bottom:8px">+ Add Family Member</button>`:''}
     <button id="setup-done-btn" class="btn ${valid?'btn-primary':''}" style="width:100%;margin-top:12px" ${valid?'':'disabled'}>
       ${state.members.length?'💾 Save Changes':'🎉 Let\'s Go!'}
@@ -199,8 +213,7 @@ function bindSetup() {
     document.getElementById('app').innerHTML=renderSetup();bindSetup();
   }));
   document.getElementById('add-member-btn')?.addEventListener('click',()=>{
-    const idx=setupMembers.length;
-    setupMembers.push({id:genId(),name:'',emoji:EMOJIS[idx],colorIndex:idx});
+    setupMembers.push({id:genId(),name:'',emoji:EMOJIS[setupMembers.length],colorIndex:setupMembers.length});
     document.getElementById('app').innerHTML=renderSetup();bindSetup();
   });
   document.getElementById('setup-done-btn').addEventListener('click',async()=>{
@@ -209,24 +222,21 @@ function bindSetup() {
     await saveMembers(setupMembers);
     state.members=setupMembers;
     state.activeMember=state.members.find(m=>m.id===state.activeMember?.id)||state.members[0];
-    state.screen='calendar'; state.modal=null; setupMembers=[];
-    render(); showToast('✅ Family saved!');
+    state.screen='calendar';state.modal=null;setupMembers=[];
+    render();showToast('✅ Family saved!');
   });
 }
 function refreshSetupBtn() {
-  const btn=document.getElementById('setup-done-btn');
-  if(!btn) return;
+  const btn=document.getElementById('setup-done-btn');if(!btn)return;
   const valid=setupMembers.every(m=>m.name.trim());
-  btn.disabled=!valid; btn.className=`btn ${valid?'btn-primary':''}`;
+  btn.disabled=!valid;btn.className=`btn ${valid?'btn-primary':''}`;
 }
 
 // ── Calendar ───────────────────────────────────
 function renderCalendar() {
   const {members,currentYear:y,currentMonth:m,activeMember}=state;
-  const firstDay=new Date(y,m,1).getDay();
-  const daysInMonth=new Date(y,m+1,0).getDate();
-  const today=new Date();
-  const isToday=d=>today.getFullYear()===y&&today.getMonth()===m&&today.getDate()===d;
+  const firstDay=new Date(y,m,1).getDay(), daysInMonth=new Date(y,m+1,0).getDate();
+  const today=new Date(), isToday=d=>today.getFullYear()===y&&today.getMonth()===m&&today.getDate()===d;
 
   const memberPills=members.map(mem=>{
     const col=COLORS[mem.colorIndex],active=activeMember?.id===mem.id;
@@ -242,16 +252,13 @@ function renderCalendar() {
   for(let i=0;i<firstDay;i++) dayCells.push('<div></div>');
   for(let d=1;d<=daysInMonth;d++){
     const ds=dateStr(y,m,d),dp=plansForDay(ds);
-    const memberIds=[...new Set(dp.map(p=>p.memberId))];
-    const t=isToday(d);
+    const memberIds=[...new Set(dp.map(p=>p.memberId))],t=isToday(d);
     const dots=memberIds.map(id=>{const mem=members.find(x=>x.id===id);return mem?`<span class="dot" style="background:${COLORS[mem.colorIndex].bg}"></span>`:''}).join('');
     const pills=dp.slice(0,2).map(plan=>{
       const mem=members.find(x=>x.id===plan.memberId);if(!mem)return'';
-      const col=COLORS[mem.colorIndex];
-      const multiDay=plan.startDate!==plan.endDate;
+      const col=COLORS[mem.colorIndex],multi=plan.startDate!==plan.endDate;
       return `<div class="plan-pill" style="background:${t?'rgba(255,255,255,0.2)':col.light};color:${t?'white':col.text}">
-        ${multiDay?'✈️ ':plan.hasDinner?'🍽️ ':plan.isFamily?'👨‍👩‍👧 ':''}${plan.title}
-      </div>`;
+        ${multi?'✈️ ':plan.hasDinner?'🍽️ ':plan.isFamily?'👨‍👩‍👧 ':''}${plan.title}</div>`;
     }).join('');
     const more=dp.length>2?`<div style="font-size:9px;color:${t?'rgba(255,255,255,0.7)':'#a0aec0'};font-weight:600">+${dp.length-2} more</div>`:'';
     dayCells.push(`<div class="day-cell ${t?'today':''}" data-day="${d}">
@@ -261,27 +268,30 @@ function renderCalendar() {
     </div>`);
   }
 
-  const legend=members.map(m=>{
-    const col=COLORS[m.colorIndex];
+  const legend=members.map(m=>{const col=COLORS[m.colorIndex];
     return `<div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.2);border-radius:20px;padding:6px 14px">
-      <span style="font-size:16px">${m.emoji}</span>
-      <span style="color:white;font-size:12px;font-weight:700">${m.name}</span>
-      <div class="dot" style="background:${col.bg}"></div>
-    </div>`;
+      <span style="font-size:16px">${m.emoji}</span><span style="color:white;font-size:12px;font-weight:700">${m.name}</span>
+      <div class="dot" style="background:${col.bg}"></div></div>`;
   }).join('');
+
+  // Show install hint only in browser (not standalone PWA)
+  const isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone;
+  const installHint=!isStandalone?`<div style="background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.25);border-radius:16px;padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+    <span style="font-size:20px">📲</span>
+    <span style="color:white;font-size:12px;font-weight:600">Tip: Add this page to your Home Screen for a full-screen app experience with no address bar!</span>
+  </div>`:'';
 
   return `<div style="max-width:860px;margin:0 auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <div>
-        <h1 style="color:white;font-size:28px;margin:0;font-weight:900">🏠 Family Calendar</h1>
-        <p style="color:rgba(255,255,255,0.75);margin:3px 0 0;font-size:13px">Stay connected, stay together 💕</p>
-      </div>
+      <div><h1 style="color:white;font-size:28px;margin:0;font-weight:900">🏠 Family Calendar</h1>
+      <p style="color:rgba(255,255,255,0.75);margin:3px 0 0;font-size:13px">Stay connected, stay together 💕</p></div>
       <button id="settings-btn" style="background:rgba(255,255,255,0.2);border:2px solid rgba(255,255,255,0.3);color:white;border-radius:20px;padding:8px 16px;cursor:pointer;font-size:13px;font-weight:600">⚙️ Members</button>
     </div>
+    ${installHint}
     <div class="glass" style="margin-bottom:16px">
       <p style="color:rgba(255,255,255,0.9);font-size:13px;font-weight:600;margin-bottom:10px">👋 Who are you? Select yourself to add plans:</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">${memberPills}</div>
-      ${activeMember?`<p style="color:rgba(255,255,255,0.75);font-size:12px;margin-top:10px;margin-bottom:0">Tap any day on the calendar to add your plans, ${activeMember.name}!</p>`:''}
+      ${activeMember?`<p style="color:rgba(255,255,255,0.75);font-size:12px;margin-top:10px;margin-bottom:0">Tap any day to add or view plans, ${activeMember.name}!</p>`:''}
     </div>
     <div style="background:white;border-radius:24px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,0.25)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
@@ -299,7 +309,7 @@ function renderCalendar() {
         <span style="color:white;font-size:12px;font-weight:700">🍽️ Dinner &nbsp;👨‍👩‍👧 Family &nbsp;✈️ Multi-day</span>
       </div>
     </div>
-    <p style="color:rgba(255,255,255,0.5);font-size:11px;text-align:center;margin-top:12px">⚡ Real-time sync powered by Supabase — all family members share the same live calendar</p>
+    <p style="color:rgba(255,255,255,0.5);font-size:11px;text-align:center;margin-top:12px">⚡ Real-time sync powered by Supabase</p>
   </div>`;
 }
 
@@ -309,26 +319,23 @@ function bindCalendar() {
   document.getElementById('next-month')?.addEventListener('click',()=>{state.currentMonth++;if(state.currentMonth>11){state.currentMonth=0;state.currentYear++;}render();});
   document.querySelectorAll('.active-member-btn').forEach(btn=>btn.addEventListener('click',e=>{
     const id=e.currentTarget.dataset.id;
-    state.activeMember=state.activeMember?.id===id?null:state.members.find(m=>m.id===id);
-    render();
+    state.activeMember=state.activeMember?.id===id?null:state.members.find(m=>m.id===id);render();
   }));
   document.querySelectorAll('.day-cell').forEach(cell=>cell.addEventListener('click',e=>{
-    state.modal={type:'day',day:+e.currentTarget.dataset.day};
-    renderModal();
+    state.modal={type:'day',day:+e.currentTarget.dataset.day};renderModal();
   }));
 }
 
 // ── Modals ─────────────────────────────────────
-let modalState = {};
+let modalState={}, confirmDeleteId=null;
 
 function renderModal() {
   document.getElementById('modal-overlay')?.remove();
-  const div=document.createElement('div');
-  div.id='modal-overlay'; div.className='overlay';
+  const div=document.createElement('div');div.id='modal-overlay';div.className='overlay';
   if(state.modal?.type==='day'){div.innerHTML=renderDayModal();document.body.appendChild(div);bindDayModal();}
   else if(state.modal?.type==='addPlan'){div.innerHTML=renderAddPlanModal();document.body.appendChild(div);bindAddPlanModal();}
 }
-function closeModal(){document.getElementById('modal-overlay')?.remove();state.modal=null;modalState={};}
+function closeModal(){document.getElementById('modal-overlay')?.remove();state.modal=null;modalState={};confirmDeleteId=null;}
 
 function renderDayModal() {
   const {day}=state.modal;
@@ -347,8 +354,10 @@ function renderDayModal() {
     const mem=state.members.find(x=>x.id===plan.memberId);if(!mem)return'';
     const col=COLORS[mem.colorIndex];
     const tagged=state.members.filter(x=>plan.taggedMembers?.includes(x.id));
-    const multiDay=plan.startDate!==plan.endDate;
+    const multi=plan.startDate!==plan.endDate;
     const timeLabel=plan.startTime?(plan.endTime?`${fmtTime(plan.startTime)} – ${fmtTime(plan.endTime)}`:fmtTime(plan.startTime)):'';
+    const isConfirming=confirmDeleteId===plan.id;
+
     return `<div class="plan-card" style="background:${col.light};border-color:${col.border}">
       <div style="display:flex;align-items:flex-start;gap:10px">
         <div style="width:36px;height:36px;border-radius:50%;background:${col.bg};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${mem.emoji}</div>
@@ -356,20 +365,32 @@ function renderDayModal() {
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
             <span style="font-weight:700;font-size:13px;color:${col.text}">${mem.name}</span>
             ${plan.isFamily?'<span class="chip" style="background:#D1FAE5;color:#065F46">Family Plan</span>':''}
-            ${multiDay?'<span class="chip" style="background:#EDE9FE;color:#6d28d9">✈️ Multi-day</span>':''}
+            ${multi?'<span class="chip" style="background:#EDE9FE;color:#6d28d9">✈️ Multi-day</span>':''}
           </div>
           <div style="font-weight:600;font-size:15px;color:#2d3748;margin-bottom:6px">${plan.isFamily?'👨‍👩‍👧 ':''}${plan.title}</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            ${multiDay?`<span class="chip" style="background:#F3F0FF;color:#6d28d9">📅 ${fmtDate(plan.startDate)} → ${fmtDate(plan.endDate)}</span>`:''}
+            ${multi?`<span class="chip" style="background:#F3F0FF;color:#6d28d9">📅 ${fmtDate(plan.startDate)} → ${fmtDate(plan.endDate)}</span>`:''}
             ${timeLabel?`<span class="chip" style="background:#EFF6FF;color:#2563eb">🕐 ${timeLabel}</span>`:''}
             ${plan.hasDinner?`<span class="chip" style="background:#FEF3C7;color:#b45309">🍽️ Dinner ${plan.dinnerTime}</span>`:''}
             ${tagged.map(tm=>`<span class="chip" style="background:${COLORS[tm.colorIndex].light};color:${COLORS[tm.colorIndex].text}">${tm.emoji} ${tm.name}</span>`).join('')}
           </div>
         </div>
-        <button class="delete-plan-btn" data-id="${plan.id}" style="background:none;border:none;font-size:15px;cursor:pointer;color:#ccc">🗑️</button>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="edit-plan-btn" data-id="${plan.id}" title="Edit plan"
+            style="background:${col.light};border:1.5px solid ${col.border};border-radius:8px;padding:5px 8px;cursor:pointer;font-size:14px;color:${col.text}">✏️</button>
+          <button class="delete-plan-btn" data-id="${plan.id}" title="Delete plan"
+            style="background:#FEE2E2;border:1.5px solid #FECACA;border-radius:8px;padding:5px 8px;cursor:pointer;font-size:14px;color:#DC2626">🗑️</button>
+        </div>
       </div>
+      ${isConfirming?`<div class="confirm-bar">
+        <span style="font-size:13px;font-weight:600;color:#DC2626">⚠️ Delete this plan?</span>
+        <div style="display:flex;gap:6px">
+          <button class="confirm-cancel-btn" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e2e8f0;background:white;color:#718096;font-size:13px;cursor:pointer;font-weight:600">Keep</button>
+          <button class="confirm-delete-btn" data-id="${plan.id}" style="padding:6px 12px;border-radius:8px;border:none;background:#DC2626;color:white;font-size:13px;cursor:pointer;font-weight:700">Yes, delete</button>
+        </div>
+      </div>`:''}
     </div>`;
-  }).join(''):'<div style="text-align:center;padding:30px 0;color:#a0aec0"><div style="font-size:32px">📭</div><div style="font-size:14px;margin-top:8px">Nothing planned yet!</div></div>';
+  }).join(''):`<div style="text-align:center;padding:30px 0;color:#a0aec0"><div style="font-size:32px">📭</div><div style="font-size:14px;margin-top:8px">Nothing planned yet!</div></div>`;
 
   return `<div class="modal">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
@@ -385,12 +406,39 @@ function renderDayModal() {
     </div>
   </div>`;
 }
+
 function bindDayModal() {
+  const day=state.modal.day;
   document.getElementById('close-modal-btn')?.addEventListener('click',closeModal);
   document.getElementById('close-modal-btn2')?.addEventListener('click',closeModal);
-  document.getElementById('add-plan-btn')?.addEventListener('click',()=>{state.modal={type:'addPlan',day:state.modal.day};renderModal();});
-  document.querySelectorAll('.delete-plan-btn').forEach(btn=>btn.addEventListener('click',async e=>{
-    await deletePlan(e.currentTarget.dataset.id);showToast('🗑️ Plan deleted');closeModal();
+  document.getElementById('add-plan-btn')?.addEventListener('click',()=>{
+    modalState={};state.modal={type:'addPlan',day};renderModal();
+  });
+
+  // Edit button — pre-fill modal with existing plan data
+  document.querySelectorAll('.edit-plan-btn').forEach(btn=>btn.addEventListener('click',e=>{
+    const plan=state.plans.find(p=>p.id===e.currentTarget.dataset.id);
+    if(!plan)return;
+    modalState={
+      editingId:plan.id, memberId:plan.memberId, title:plan.title,
+      startDate:plan.startDate, endDate:plan.endDate,
+      startTime:plan.startTime||'', endTime:plan.endTime||'',
+      hasDinner:plan.hasDinner, dinnerTime:plan.dinnerTime||'19:00',
+      isFamily:plan.isFamily, tagged:plan.taggedMembers||[],
+    };
+    state.modal={type:'addPlan',day};renderModal();
+  }));
+
+  // Delete — show inline confirmation first
+  document.querySelectorAll('.delete-plan-btn').forEach(btn=>btn.addEventListener('click',e=>{
+    confirmDeleteId=e.currentTarget.dataset.id;renderModal();
+  }));
+  document.querySelectorAll('.confirm-cancel-btn').forEach(btn=>btn.addEventListener('click',()=>{
+    confirmDeleteId=null;renderModal();
+  }));
+  document.querySelectorAll('.confirm-delete-btn').forEach(btn=>btn.addEventListener('click',async e=>{
+    await deletePlan(e.currentTarget.dataset.id);
+    confirmDeleteId=null;showToast('🗑️ Plan deleted');closeModal();
   }));
 }
 
@@ -403,107 +451,80 @@ function renderAddPlanModal() {
   const selId=modalState.memberId||activeMember?.id||members[0]?.id;
   const mem=members.find(m=>m.id===selId)||members[0];
   const col=COLORS[mem?.colorIndex||0];
+  const isEditing=!!modalState.editingId;
   const hasDinner=modalState.hasDinner||false;
   const isFamily=modalState.isFamily||false;
   const tagged=modalState.tagged||[];
   const startDate=modalState.startDate||clickedDs;
   const endDate=modalState.endDate||clickedDs;
-  const startTime=modalState.startTime||'';
-  const endTime=modalState.endTime||'';
 
   const memberBtns=members.map(m=>{
     const c=COLORS[m.colorIndex],active=m.id===selId;
     return `<button class="member-sel-btn" data-id="${m.id}" style="display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:20px;border:2px solid ${active?c.bg:'#e2e8f0'};background:${active?c.light:'white'};color:${active?c.text:'#718096'};cursor:pointer;font-weight:600;font-size:13px">
-      <span style="font-size:18px">${m.emoji}</span>${m.name}
-    </button>`;
+      <span style="font-size:18px">${m.emoji}</span>${m.name}</button>`;
   }).join('');
 
   const tagBtns=members.filter(m=>m.id!==selId).map(m=>{
     const c=COLORS[m.colorIndex],on=tagged.includes(m.id);
     return `<button class="tag-btn" data-id="${m.id}" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;border:2px solid ${on?c.bg:'#e2e8f0'};background:${on?c.light:'white'};color:${on?c.text:'#718096'};cursor:pointer;font-size:13px;font-weight:600">
-      ${m.emoji} ${m.name}
-    </button>`;
+      ${m.emoji} ${m.name}</button>`;
   }).join('');
 
   return `<div class="modal">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
-      <div><h3 style="margin:0;font-size:20px;font-weight:800;color:#2d3748">📝 Add a Plan</h3>
+      <div><h3 style="margin:0;font-size:20px;font-weight:800;color:#2d3748">${isEditing?'✏️ Edit Plan':'📝 Add a Plan'}</h3>
       <p style="margin:4px 0 0;color:#718096;font-size:13px">${label}</p></div>
       <button id="close-modal-btn" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999">✕</button>
     </div>
-
     <span class="label">Who's adding this?</span>
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">${memberBtns}</div>
-
     <span class="label">What's the plan?</span>
     <input id="plan-title" placeholder="e.g. Trip to Bali, Family dinner..."
-      style="width:100%;padding:12px 14px;border-radius:12px;font-size:14px;
-      border:2px solid ${col.border};outline:none;margin-bottom:14px;
-      background:${col.light};color:#2d3748;font-weight:500"/>
-
-    <!-- Date & Time -->
-    <div class="section-box" style="background:#EFF6FF;border-color:#BFDBFE;margin-bottom:14px">
+      style="width:100%;padding:12px 14px;border-radius:12px;font-size:14px;border:2px solid ${col.border};
+      outline:none;margin-bottom:14px;background:${col.light};color:#2d3748;font-weight:500"/>
+    <div style="background:#EFF6FF;border:2px solid #BFDBFE;border-radius:14px;padding:14px;margin-bottom:14px">
       <div style="font-weight:700;font-size:13px;color:#1d4ed8;margin-bottom:10px">📅 Date &amp; Time</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-        <div>
-          <div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:4px;text-transform:uppercase">Start Date</div>
-          <input type="date" id="start-date" value="${startDate}"
-            style="width:100%;padding:8px 10px;border-radius:10px;font-size:13px;border:2px solid #BFDBFE;outline:none;background:white;color:#2d3748"/>
-        </div>
-        <div>
-          <div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:4px;text-transform:uppercase">End Date</div>
-          <input type="date" id="end-date" value="${endDate}"
-            style="width:100%;padding:8px 10px;border-radius:10px;font-size:13px;border:2px solid #BFDBFE;outline:none;background:white;color:#2d3748"/>
-        </div>
+        <div><div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:4px;text-transform:uppercase">Start Date</div>
+          <input type="date" id="start-date" value="${startDate}" style="width:100%;padding:8px 10px;border-radius:10px;font-size:13px;border:2px solid #BFDBFE;outline:none;background:white;color:#2d3748"/></div>
+        <div><div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:4px;text-transform:uppercase">End Date</div>
+          <input type="date" id="end-date" value="${endDate}" style="width:100%;padding:8px 10px;border-radius:10px;font-size:13px;border:2px solid #BFDBFE;outline:none;background:white;color:#2d3748"/></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div>
-          <div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:4px;text-transform:uppercase">Start Time <span style="font-weight:400">(optional)</span></div>
-          <input type="time" id="start-time" value="${startTime}"
-            style="width:100%;padding:8px 10px;border-radius:10px;font-size:13px;border:2px solid #BFDBFE;outline:none;background:white;color:#2d3748"/>
-        </div>
-        <div>
-          <div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:4px;text-transform:uppercase">End Time <span style="font-weight:400">(optional)</span></div>
-          <input type="time" id="end-time" value="${endTime}"
-            style="width:100%;padding:8px 10px;border-radius:10px;font-size:13px;border:2px solid #BFDBFE;outline:none;background:white;color:#2d3748"/>
-        </div>
+        <div><div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:4px;text-transform:uppercase">Start Time <span style="font-weight:400">(opt)</span></div>
+          <input type="time" id="start-time" value="${modalState.startTime||''}" style="width:100%;padding:8px 10px;border-radius:10px;font-size:13px;border:2px solid #BFDBFE;outline:none;background:white;color:#2d3748"/></div>
+        <div><div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:4px;text-transform:uppercase">End Time <span style="font-weight:400">(opt)</span></div>
+          <input type="time" id="end-time" value="${modalState.endTime||''}" style="width:100%;padding:8px 10px;border-radius:10px;font-size:13px;border:2px solid #BFDBFE;outline:none;background:white;color:#2d3748"/></div>
       </div>
     </div>
-
     <div class="toggle-wrap" style="background:#FFF8F0;border:2px solid #FDDCB5">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:20px">🍽️</span>
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">🍽️</span>
         <div><div style="font-weight:700;font-size:14px;color:#2d3748">Home for dinner?</div>
         <div style="font-size:12px;color:#718096">Let the family know!</div></div>
       </div>
       <div class="toggle" id="dinner-toggle" style="background:${hasDinner?'#F59E0B':'#CBD5E0'}">
-        <div class="toggle-knob" style="left:${hasDinner?23:3}px"></div>
-      </div>
+        <div class="toggle-knob" style="left:${hasDinner?23:3}px"></div></div>
     </div>
     ${hasDinner?`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;margin-top:-4px">
       <span style="font-size:13px;color:#718096;font-weight:500">Dinner time:</span>
       <input type="time" id="dinner-time" value="${modalState.dinnerTime||'19:00'}"
         style="padding:6px 10px;border-radius:8px;border:2px solid #FDDCB5;font-size:14px"/>
     </div>`:''}
-
     <div class="toggle-wrap" style="background:#F0FFF4;border:2px solid #9AE6B4">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:20px">👨‍👩‍👧</span>
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">👨‍👩‍👧</span>
         <div><div style="font-weight:700;font-size:14px;color:#2d3748">Family plan?</div>
         <div style="font-size:12px;color:#718096">Invite other members</div></div>
       </div>
       <div class="toggle" id="family-toggle" style="background:${isFamily?'#48BB78':'#CBD5E0'}">
-        <div class="toggle-knob" style="left:${isFamily?23:3}px"></div>
-      </div>
+        <div class="toggle-knob" style="left:${isFamily?23:3}px"></div></div>
     </div>
     ${isFamily&&tagBtns?`<div style="margin-bottom:16px;margin-top:-4px">
       <p style="margin:0 0 8px;font-size:12px;color:#718096;font-weight:500">Tag family members:</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">${tagBtns}</div>
     </div>`:''}
-
     <div style="display:flex;gap:10px;margin-top:8px">
       <button id="cancel-add-btn" class="btn btn-secondary" style="flex:1">Cancel</button>
-      <button id="save-plan-btn" class="btn btn-primary" style="flex:2">✨ Save Plan</button>
+      <button id="save-plan-btn" class="btn btn-primary" style="flex:2">${isEditing?'💾 Save Changes':'✨ Save Plan'}</button>
     </div>
   </div>`;
 }
@@ -511,9 +532,9 @@ function renderAddPlanModal() {
 function bindAddPlanModal() {
   const day=state.modal.day;
   document.getElementById('close-modal-btn')?.addEventListener('click',closeModal);
-  document.getElementById('cancel-add-btn')?.addEventListener('click',()=>{state.modal={type:'day',day};renderModal();});
+  document.getElementById('cancel-add-btn')?.addEventListener('click',()=>{modalState.editingId?closeModal():(state.modal={type:'day',day},renderModal());});
 
-  const saveModalInputs=()=>{
+  const saveInputs=()=>{
     modalState.startDate=document.getElementById('start-date')?.value||modalState.startDate;
     modalState.endDate=document.getElementById('end-date')?.value||modalState.endDate;
     modalState.startTime=document.getElementById('start-time')?.value||'';
@@ -523,15 +544,13 @@ function bindAddPlanModal() {
   };
 
   document.querySelectorAll('.member-sel-btn').forEach(btn=>btn.addEventListener('click',e=>{
-    saveModalInputs(); modalState.memberId=e.currentTarget.dataset.id; renderModal();
+    saveInputs();modalState.memberId=e.currentTarget.dataset.id;renderModal();
   }));
-  document.getElementById('dinner-toggle')?.addEventListener('click',()=>{saveModalInputs();modalState.hasDinner=!modalState.hasDinner;renderModal();});
-  document.getElementById('family-toggle')?.addEventListener('click',()=>{saveModalInputs();modalState.isFamily=!modalState.isFamily;renderModal();});
+  document.getElementById('dinner-toggle')?.addEventListener('click',()=>{saveInputs();modalState.hasDinner=!modalState.hasDinner;renderModal();});
+  document.getElementById('family-toggle')?.addEventListener('click',()=>{saveInputs();modalState.isFamily=!modalState.isFamily;renderModal();});
   document.querySelectorAll('.tag-btn').forEach(btn=>btn.addEventListener('click',e=>{
-    saveModalInputs();
-    const id=e.currentTarget.dataset.id,arr=modalState.tagged||[];
-    modalState.tagged=arr.includes(id)?arr.filter(x=>x!==id):[...arr,id];
-    renderModal();
+    saveInputs();const id=e.currentTarget.dataset.id,arr=modalState.tagged||[];
+    modalState.tagged=arr.includes(id)?arr.filter(x=>x!==id):[...arr,id];renderModal();
   }));
 
   const inp=document.getElementById('plan-title');
@@ -545,17 +564,23 @@ function bindAddPlanModal() {
     if(!startDate||!endDate){showToast('⚠️ Please set start and end dates');return;}
     if(endDate<startDate){showToast('⚠️ End date must be on or after start date');return;}
     const selId=modalState.memberId||state.activeMember?.id||state.members[0]?.id;
-    await addPlan({
-      id:genId(), startDate, endDate,
+    const planData={
+      startDate,endDate,
       startTime:document.getElementById('start-time')?.value||null,
       endTime:document.getElementById('end-time')?.value||null,
-      memberId:selId, title,
+      memberId:selId,title,
       hasDinner:modalState.hasDinner||false,
       dinnerTime:modalState.hasDinner?(document.getElementById('dinner-time')?.value||'19:00'):null,
       isFamily:modalState.isFamily||false,
       taggedMembers:modalState.isFamily?(modalState.tagged||[]):[]
-    });
-    showToast('🎉 Plan saved!');
+    };
+    if(modalState.editingId){
+      await updatePlan({id:modalState.editingId,...planData});
+      showToast('✏️ Plan updated!');
+    } else {
+      await addPlan({id:genId(),...planData});
+      showToast('🎉 Plan saved!');
+    }
     closeModal();
   });
 }
@@ -564,15 +589,12 @@ function bindAddPlanModal() {
 async function init() {
   try {
     const [members,plans]=await Promise.all([loadMembers(),loadPlans()]);
-    state.members=members; state.plans=plans;
+    state.members=members;state.plans=plans;
     state.activeMember=members[0]||null;
     state.screen=members.length?'calendar':'setup';
-  } catch(e) {
-    console.error(e); state.screen='setup';
-  }
+  } catch(e){console.error(e);state.screen='setup';}
   document.getElementById('loading').style.display='none';
-  render();
-  subscribeToPlans();
+  render();subscribeToPlans();
 }
 init();
 </script>
